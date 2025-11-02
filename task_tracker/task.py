@@ -2,6 +2,9 @@ import json
 import argparse
 from datetime import datetime
 from pathlib import Path
+from colorama import Fore, Style, init
+
+init(autoreset=True)
 
 DATA_FILE = Path("tasks.json")
 
@@ -30,16 +33,18 @@ def add_task(description):
     
     tasks.append(new_task)
     save_tasks(tasks) # Updates the file
-    print(f"✅ Task added: {description}")
+    print(Fore.GREEN + f"✅ Task added: {description}")
     
 # List All Tasks
 def list_tasks():
     tasks = load_tasks()
     if not tasks:
-        print("No tasks found.")
+        print(Fore.RED + "No tasks found.")
         return
     for task in tasks:
-        print(f"[{task['id']}] {task['description']} - {task['status']}")
+        color = Fore.GREEN if task["status"] == "Done" else Fore.YELLOW
+        print(f"{color}[{task['id']}] {task['description']} - {task['status']}{Style.RESET_ALL}")
+
         
 # Update Tasks
 def complete_task(task_id):
@@ -48,19 +53,19 @@ def complete_task(task_id):
         if task["id"] == task_id:
             task["status"] = "Done"
             save_tasks(tasks)
-            print(f"🎉 Task {task_id} marked as done.")
+            print(Fore.CYAN + f"🎉 Task {task_id} marked as done.")
             return
-    print("❎ Task not found.")
+    print(Fore.RED + "❌ Task not found.")
 
 # Delete Tasks
 def delete_task(task_id):
     tasks = load_tasks()
     updated_tasks = [t for t in tasks if t["id"] != task_id]
     if len(updated_tasks) == len(tasks):
-        print("❎ Task not found.")
+        print(Fore.RED + "❌ Task not found.")
         return
     save_tasks(updated_tasks)
-    print(f"🗑️ Task {task_id} deleted.")
+    print(Fore.MAGENTA + f"🗑️ Task {task_id} deleted.")
     
 # Command Parser
 def main():

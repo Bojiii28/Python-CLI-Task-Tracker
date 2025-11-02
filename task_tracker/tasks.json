@@ -1,11 +1,5 @@
 [
     {
-        "id": 1,
-        "description": "Learn Python Fundamentals",
-        "status": "Done",
-        "created_at": "2025-11-02 18:00:36"
-    },
-    {
         "id": 2,
         "description": "Learn Django Framework",
         "status": "Pending",
@@ -14,13 +8,25 @@
     {
         "id": 3,
         "description": "Cook Dinner",
-        "status": "Pending",
+        "status": "Done",
         "created_at": "2025-11-02 18:04:14"
     },
     {
         "id": 4,
         "description": "Prepare for interview",
-        "status": "Pending",
+        "status": "Done",
         "created_at": "2025-11-02 18:04:38"
+    },
+    {
+        "id": 5,
+        "description": "Study Python",
+        "status": "Pending",
+        "created_at": "2025-11-02 18:41:50"
+    },
+    {
+        "id": 6,
+        "description": "Learn Flask",
+        "status": "Pending",
+        "created_at": "2025-11-02 18:42:04"
     }
 ]
