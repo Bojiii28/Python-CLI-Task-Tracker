@@ -1,122 +1,188 @@
-import json
+import sqlite3
 import argparse
 from datetime import datetime
-from pathlib import Path
 from colorama import Fore, Style, init
 
+# Initialize colorama for colored CLI output
 init(autoreset=True)
 
-DATA_FILE = Path("tasks.json")
+# Define database file name
+DB_FILE = "tasks.db"
 
-# File Handler Functions
-def load_tasks():
-    if DATA_FILE.exists():
-        with open(DATA_FILE, "r") as file: # Read mode
-            return json.load(file)
-    return []
+# -----------------------------------------------------------
+# 1. DATABASE INITIALIZATION
+# -----------------------------------------------------------
+def init_db():
+    """
+    Creates a SQLite database file (tasks.db) if it doesn't exist.
+    Inside it, creates a 'tasks' table to store all your task info.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            description TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Pending',
+            created_at TEXT,
+            due_date TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
 
-# Save Tasks
-def save_tasks(tasks):
-    with open(DATA_FILE, "w") as file: # Write mode
-        json.dump(tasks, file, indent=4)
-        
-# Add Tasks
-def add_task(description):
-    tasks = load_tasks()
-    
-    new_task = {
-        "id": len(tasks) + 1, # Unique ID
-        "description": description,
-        "status": "Pending",
-        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S") # Readable timestamp
-    }
-    
-    tasks.append(new_task)
-    save_tasks(tasks) # Updates the file
+# -----------------------------------------------------------
+# 2. ADD TASK
+# -----------------------------------------------------------
+def add_task(description, due_date=None):
+    """
+    Inserts a new task into the database.
+    If a due date is given, it stores that too.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('''
+        INSERT INTO tasks (description, status, created_at, due_date)
+        VALUES (?, 'Pending', ?, ?)
+    ''', (description, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), due_date))
+    conn.commit()
+    conn.close()
     print(Fore.GREEN + f"✅ Task added: {description}")
-    
-# List All Tasks
+
+# -----------------------------------------------------------
+# 3. LIST TASKS
+# -----------------------------------------------------------
 def list_tasks():
-    tasks = load_tasks()
+    """
+    Fetches and displays all tasks from the database.
+    Color codes them based on status.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT * FROM tasks")
+    tasks = c.fetchall()
+    conn.close()
+
     if not tasks:
         print(Fore.RED + "No tasks found.")
         return
-    for task in tasks:
-        color = Fore.GREEN if task["status"] == "Done" else Fore.YELLOW
-        print(f"{color}[{task['id']}] {task['description']} - {task['status']}{Style.RESET_ALL}")
 
-        
-# Update Tasks
+    for task in tasks:
+        id, description, status, created_at, due_date = task
+        color = Fore.GREEN if status == "Done" else Fore.YELLOW
+        due_text = f" - Due: {due_date}" if due_date else ""
+        print(f"{color}[{id}] {description} - {status}{due_text}{Style.RESET_ALL}")
+
+# -----------------------------------------------------------
+# 4. COMPLETE TASK
+# -----------------------------------------------------------
 def complete_task(task_id):
-    tasks = load_tasks()
-    for task in tasks:
-        if task["id"] == task_id:
-            task["status"] = "Done"
-            save_tasks(tasks)
-            print(Fore.CYAN + f"🎉 Task {task_id} marked as done.")
-            return
-    print(Fore.RED + "❌ Task not found.")
+    """
+    Marks a specific task as 'Done' based on its ID.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE tasks SET status='Done' WHERE id=?", (task_id,))
+    conn.commit()
 
-# Delete Tasks
-def delete_task(task_id):
-    tasks = load_tasks()
-    updated_tasks = [t for t in tasks if t["id"] != task_id]
-    if len(updated_tasks) == len(tasks):
+    if c.rowcount == 0:
         print(Fore.RED + "❌ Task not found.")
+    else:
+        print(Fore.CYAN + f"🎉 Task {task_id} marked as done.")
+    conn.close()
+
+# -----------------------------------------------------------
+# 5. DELETE TASK
+# -----------------------------------------------------------
+def delete_task(task_id):
+    """
+    Permanently removes a task from the database.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM tasks WHERE id=?", (task_id,))
+    conn.commit()
+
+    if c.rowcount == 0:
+        print(Fore.RED + "❌ Task not found.")
+    else:
+        print(Fore.MAGENTA + f"🗑️ Task {task_id} deleted.")
+    conn.close()
+
+# -----------------------------------------------------------
+# 6. SEARCH TASK
+# -----------------------------------------------------------
+def search_tasks(keyword):
+    """
+    Searches for tasks that contain the given keyword in their description.
+    Uses the SQL 'LIKE' operator for partial matches.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT * FROM tasks WHERE description LIKE ?", ('%' + keyword + '%',))
+    results = c.fetchall()
+    conn.close()
+
+    if not results:
+        print(Fore.RED + "❌ No tasks found.")
         return
-    save_tasks(updated_tasks)
-    print(Fore.MAGENTA + f"🗑️ Task {task_id} deleted.")
-    
-# Command Parser
+
+    for t in results:
+        color = Fore.GREEN if t[2] == "Done" else Fore.YELLOW
+        print(f"{color}[{t[0]}] {t[1]} - {t[2]} - Due: {t[4]}{Style.RESET_ALL}")
+
+# -----------------------------------------------------------
+# 7. COMMAND LINE HANDLER
+# -----------------------------------------------------------
 def main():
-    # Create the main parser and give it a short description
+    """
+    The command-line interface that handles all user commands.
+    Uses argparse to parse 'add', 'list', 'done', 'delete', and 'search' commands.
+    """
+    init_db()  # Ensure database and table exist
+
     parser = argparse.ArgumentParser(description="Simple CLI Task Tracker")
-    
-    # Add a group of subcommands (add, list, done, delete)
     subparsers = parser.add_subparsers(dest="command")
 
-    # ---------------- ADD COMMAND ----------------
-    # Create a parser for the "add" command
-    add_parser = subparsers.add_parser("add")
-    # Add a required argument (task description)
+    # Add
+    add_parser = subparsers.add_parser("add", help="Add a new task with optional due date")
     add_parser.add_argument("description", type=str, help="Task description")
+    add_parser.add_argument("--due", type=str, help="Optional due date (YYYY-MM-DD)")
 
-    # ---------------- LIST COMMAND ----------------
-    # Create a parser for the "list" command (no extra arguments)
-    subparsers.add_parser("list")
+    # List
+    subparsers.add_parser("list", help="List all tasks")
 
-    # ---------------- DONE COMMAND ----------------
-    # Create a parser for the "done" command
-    done_parser = subparsers.add_parser("done")
-    # Add a required integer argument for task ID
+    # Done
+    done_parser = subparsers.add_parser("done", help="Mark a task as done")
     done_parser.add_argument("id", type=int, help="Task ID")
 
-    # ---------------- DELETE COMMAND ----------------
-    # Create a parser for the "delete" command
-    delete_parser = subparsers.add_parser("delete")
-    # Add a required integer argument for task ID
+    # Delete
+    delete_parser = subparsers.add_parser("delete", help="Delete a task")
     delete_parser.add_argument("id", type=int, help="Task ID")
 
-    # Parse all command-line arguments entered by the user
+    # Search
+    search_parser = subparsers.add_parser("search", help="Search tasks by keyword")
+    search_parser.add_argument("keyword", type=str, help="Keyword to search for")
+
+    # Parse arguments
     args = parser.parse_args()
 
-    # ---------------- COMMAND HANDLER ----------------
-    # Match the command and call the correct function
+    # Command Handler
     if args.command == "add":
-        add_task(args.description)
+        add_task(args.description, args.due)
     elif args.command == "list":
         list_tasks()
     elif args.command == "done":
         complete_task(args.id)
     elif args.command == "delete":
         delete_task(args.id)
+    elif args.command == "search":
+        search_tasks(args.keyword)
     else:
-        # If no valid command, show the help message
         parser.print_help()
 
-# Run the main() function only when this script is executed directly
+# -----------------------------------------------------------
+# 8. RUN THE PROGRAM
+# -----------------------------------------------------------
 if __name__ == "__main__":
     main()
-
-
-    
